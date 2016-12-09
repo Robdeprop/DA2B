@@ -6,7 +6,7 @@ import java.rmi.RemoteException;
 
 public class Singhal_main {
 
-	private static final String[] ipAddressesInNetwork = {"localhost", "localhost", "localhost", "localhost"};
+	private static final String[] ipAddressesInNetwork = {"localhost", "localhost"};
 
     public static void main(String args[]) {
     	System.out.println("IP Addresses in the network that should run this code:");

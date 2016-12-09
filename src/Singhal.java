@@ -70,12 +70,17 @@ public class Singhal implements Singhal_RMI, Runnable, Serializable {
 		
 		
 		// TO DO: Initialize more?
+		
+		
+		// Now start the process by waiting for a random delay before requesting the CS
+		this.waitBeforeRequestingCS();
 	}
 	
 
 	// Requests access to the CS
 	public void requestCSAccess()
 	{
+		System.out.println(this.index + ": now requesting CS Access");
 		this.S.set(this.index, "R"); // Set own state to requesting
 		
 		this.N.set(this.index, this.N.get(this.index) + 1); // Increment request number
@@ -97,13 +102,15 @@ public class Singhal implements Singhal_RMI, Runnable, Serializable {
 	public void sendRequest(int receiverIndex)
 	{
 		// send(request;i,N[i]) to Pj
-		// TO DO: Implement code that sends a request to process with id receiverIndex
+		System.out.println(this.index + ": sending REQUEST to process " + receiverIndex);
+		
+		new Thread(new DelayedMessage("REQUEST", this.processes.get(receiverIndex), this.index, this.N.get(this.index))).start();
 	}
 	
 	// Processes a received request from process with id senderIndex
 	public void receiveRequest(int senderIndex, int r)
 	{
-		// TO DO: Implement code that receives a request from process with id senderIndex
+		System.out.println(this.index + ": received REQUEST from process " + senderIndex);
 		
 		this.N.set(senderIndex, r); // Updates the message number to the new value
 		switch (this.S.get(this.index))
@@ -129,13 +136,18 @@ public class Singhal implements Singhal_RMI, Runnable, Serializable {
 	// Sends the token to process with id receiverIndex
 	public void sendToken(int receiverIndex)
 	{
-		// TO DO: Implement code that sends the token to process with id receiverIndex
+		System.out.println(this.index + ": sending TOKEN to process " + receiverIndex);
+		
+		new Thread(new DelayedMessage("TOKEN", this.processes.get(receiverIndex), this.token)).start();
+		
+		this.token = null; // We don't need the token anymore... Unset it
 	}
 	
 	// Processes a received token from process with id senderIndex
 	public void receiveToken(Token token)
 	{
-		// TO DO: Implement code that processes the token received from process with id senderIndex
+		System.out.println(this.index + ": received TOKEN");
+		
 		this.token = token; // We got the token
 		
 		this.S.set(this.index, "E"); // Start executing the CS
@@ -147,8 +159,8 @@ public class Singhal implements Singhal_RMI, Runnable, Serializable {
 	{
 		// This piece of code starts executing the CS in a new thread
 		System.out.println(this.index + ": Starting the CS...");
-		CSExecuter c = new CSExecuter(this);
-		new Thread(new CS(c, this.index)).start();
+		ThreadCallback c = new ThreadCallback(this, "doneWithCS");
+		new Thread(new CSExecuter(c, this.index)).start();
 	}
 	
 	public void doneWithCS()
@@ -193,7 +205,7 @@ public class Singhal implements Singhal_RMI, Runnable, Serializable {
 				if(this.S.get(j).equals("R"))
 				{
 					this.sendToken(j); // Send the token to j
-					return;
+					break;
 				}
 			}
 			for(int j = 0; j < this.index; j++)
@@ -201,10 +213,31 @@ public class Singhal implements Singhal_RMI, Runnable, Serializable {
 				if(this.S.get(j).equals("R"))
 				{
 					this.sendToken(j);
-					return;
+					break;
 				}
 			}
 		}
+		
+		// Now wait for a bit before requesting the CS again
+		this.waitBeforeRequestingCS();
+	}
+	
+	
+	// Waits randomly before requesting the CS again
+	public void waitBeforeRequestingCS()
+	{
+		System.out.println(this.index + ": starting the wait before requesting CS...");
+		ThreadCallback c = new ThreadCallback(this, "doneWaitingForCSRequest");
+		new Thread(new WaitBeforeCSRequest(c, this.index)).start();
+	}
+	
+	// Gets called after waiting for a random delay to request the CS again
+	public void doneWaitingForCSRequest()
+	{
+		System.out.println(this.index + ": Continuing after waiting to request the CS...");
+		
+		// Now request the CS
+		this.requestCSAccess();
 	}
 	
 	@Override
@@ -219,17 +252,6 @@ public class Singhal implements Singhal_RMI, Runnable, Serializable {
 	{
 		
 	}*/
-
-	@Override
-	public void send(int receiverIndex, Message message, int delayTime) throws RemoteException {
-		
-		
-	}
-
-	@Override
-	public void receive(Message message) throws RemoteException {
-		
-	}
 	
 	public void attemptPendingMessageDelivery()
 	{
@@ -269,15 +291,6 @@ public class Singhal implements Singhal_RMI, Runnable, Serializable {
 		this.reset();
 	}
 
-	public void sendSomethingToEveryone() throws RemoteException {
-		for(int i = 0; i < processes.size(); i++)
-		{
-	        if(i != this.index)
-	        {
-	        	this.send(i, new Message(this.index, i, 1), 1000);
-	        }
-	    }
-	}
 
 	@Override
 	public int getRandomInt() throws RemoteException {

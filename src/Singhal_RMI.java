@@ -5,16 +5,18 @@ import java.util.ArrayList;
 
 public interface Singhal_RMI extends Remote {
 	
-	public void send(int receiverIndex, Message message, int delayTime) throws RemoteException;
-	
 	public void reset() throws RemoteException;
 	
-	public void receive(Message message) throws RemoteException;
+	public void sendRequest(int receiverIndex) throws RemoteException;
+	
+	public void receiveRequest(int senderIndex, int r) throws RemoteException;
+	
+	public void sendToken(int receiverIndex) throws RemoteException;
+	
+	public void receiveToken(Token token) throws RemoteException;
 
 	public int getIndex() throws RemoteException;
 	
 	public int getRandomInt() throws RemoteException;
-
-	public ArrayList<Message> getReceivedMessages() throws RemoteException;
 
 }

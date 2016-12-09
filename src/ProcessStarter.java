@@ -22,7 +22,7 @@ public class ProcessStarter {
     private ArrayList<Singhal_RMI> processes;
     private InetAddress inetAddress;
     String localIpAddress;
-    private static final String PROCESS_PREFIX = "SinghalSESProcess";
+    private static final String PROCESS_PREFIX = "SinghalProcess";
     private Singhal_RMI ownProcess = null;
 
     /**
