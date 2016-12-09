@@ -23,7 +23,7 @@ public class DelayedMessage implements Runnable {
 		{
 			// Include an automatic random delay
 			Random rand = new Random();
-	 		delayTime = rand.nextInt(10000) + 100; // Get a random number between 100 and 10100 milliseconds
+	 		delayTime = rand.nextInt(900) + 100; // Get a random number between 100 and 1000 milliseconds
 		}
 		this.delayTime = delayTime;
 	}

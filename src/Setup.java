@@ -23,16 +23,6 @@ public class Setup {
 		p.start(ipAddressesInNetwork, true, silent);
 		this.processes = p.getProcesses();
 		
-		// RESET all processes
-		for(Singhal_RMI process : processes)
-		{
-			try {
-				process.reset();
-			} catch (RemoteException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-		}
 	}
 	
 	public ArrayList<Singhal_RMI> getProcesses()

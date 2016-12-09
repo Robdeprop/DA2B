@@ -11,11 +11,15 @@
 
 import java.rmi.RemoteException;
 import java.util.ArrayList;
+import java.util.Map;
+import java.util.TreeMap;
 
 public class TestScenarios {
 	
 	private Setup setup;
 	private int errors = 0;
+	
+	private TreeMap<Long, Long> csAccessTimes;
 	
 	public static void main(String args[]) {
 		new TestScenarios();
@@ -23,11 +27,6 @@ public class TestScenarios {
 	
 	public TestScenarios() {
 		systemTest();
-		testScenario1();
-		testScenario2();
-		testScenario3();
-		testScenario4();
-		testScenario5();
 	}
 	
 	public void assertEquals(int int1, int int2)
@@ -54,11 +53,11 @@ public class TestScenarios {
 	{
 		if(errors == 0)
 		{
-			System.out.println("pass!");
+			System.out.println("Test passed!");
 		}
 		else
 		{
-			System.out.println("fail!, produced" + errors + " failing errors.");
+			System.out.println("Test failed with " + errors + " errors!");
 		}
 		errors = 0;
 		
@@ -79,6 +78,38 @@ public class TestScenarios {
 	
     public void init(){
         setup = new Setup(true);
+        
+        System.out.println("The communication between the processes will now be stopped for 30 seconds to ensure a proper reset of the processes");
+        ArrayList<Singhal_RMI> processes = setup.getProcesses();
+        // RESET all processes
+ 		for(Singhal_RMI process : processes)
+ 		{
+ 			try {
+ 				process.disableCommunication();
+ 			} catch (RemoteException e) {
+ 				// TODO Auto-generated catch block
+ 				e.printStackTrace();
+ 			}
+ 		}
+ 		
+ 		try {
+			Thread.sleep(30000);
+		} catch (InterruptedException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		} // Sleep for 30 seconds to kill all messages and processes that were in action
+ 		
+ 		for(Singhal_RMI process : processes)
+ 		{
+ 			try {
+ 				process.reset();
+ 				process.startExecution(); // Start the process
+ 			} catch (RemoteException e) {
+ 				// TODO Auto-generated catch block
+ 				e.printStackTrace();
+ 			}
+ 		}
+ 		System.out.println("Reset completed. Now commencing the test");
     }
     
     
@@ -87,247 +118,78 @@ public class TestScenarios {
      * process 1 will send message 1 to process 2, but a long delay will occur
      * process 1 sends message 2 to process 2. message 2 arrives before message 1.
      */
+    
+    public void getAccessTimes()
+    {
+    	this.csAccessTimes = new TreeMap<Long, Long>();
+    	ArrayList<Singhal_RMI> processes = this.setup.getProcesses();
+    	int totalProcesses = processes.size();
+    	for(int i = 0; i < totalProcesses; i++)
+    	{
+    		ArrayList<ArrayList<Long>> accessTimes;
+			try {
+				accessTimes = processes.get(i).getCSAccessTimes();
+				for(int j = 0; j < accessTimes.size(); j++)
+	    		{
+	    			this.csAccessTimes.put(accessTimes.get(j).get(0), accessTimes.get(j).get(1));
+	    		}
+			} catch (RemoteException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+    	}
+    }
+    
+    public void checkAccessTimes()
+    {
+    	long startTime = 0;
+    	long endTime = 0;
+    	long previousEndTime = 0;
+    	
+    	if(this.csAccessTimes.size() == 0)
+    	{
+    		errors++;
+    		System.out.println("Error: Nobody got CS access during the test!");
+    	}
+    	
+    	for(Map.Entry<Long, Long> entry : this.csAccessTimes.entrySet()) {
+    		  startTime = entry.getKey();
+    		  previousEndTime = endTime;
+    		  endTime = entry.getValue();
+    		  
+    		  if(startTime > previousEndTime)
+    		  {
+    			  System.out.println("Some process had the CS from " + startTime + " to " + endTime + ":\tOK");
+    		  }
+    		  else
+    		  {
+    			 
+    			  System.out.println("Some process had the CS from " + startTime + " to " + endTime + ":\tERROR!");
+    			  this.errors++;
+    		  }
+    	}
+    }
+    
     public void systemTest(){
     	startScenario("systemTest");
-        Singhal_RMI process1 = setup.getProcesses().get(0);
-        Singhal_RMI process2 = setup.getProcesses().get(1);
-        try{
-            Message message1 = new Message(process1.getIndex(),process2.getIndex(), 1);
-            process1.send(process2.getIndex(), message1, 10); // ,10 means the message is delayed by 10 milliseconds
-
-            Message message2 = new Message(process1.getIndex(), process2.getIndex(), 2);
-            process1.send(process2.getIndex(), message2, 0);
-
-            // wait until all messages have arrived.
-            Thread.sleep(20);
-
-            ArrayList<Message> messages = process2.getReceivedMessages();
-            assertEquals(2, messages.size());
-            assertEquals(message1.getId(), messages.get(0).getId());
-            assertEquals(message2.getId(), messages.get(1).getId());
-
-        } catch (RemoteException e){
-            e.printStackTrace();
-            fail();
-        } catch (InterruptedException e){
-            e.printStackTrace();
-            fail();
-        }
-        testCompleted();
-    }
-    
-    
-    /*
-     * Proc1 will send msg1 to Proc2 
-     * Proc2 will send msg2 to Proc3 
-     * Proc1 will send msg3 to Proc3
-     * Proc2 will send msg4 to Proc3
-     */
-    public void testScenario1(){
-    	startScenario("testScenario1");
-        Singhal_RMI process1 = setup.getProcesses().get(0);
-        Singhal_RMI process2 = setup.getProcesses().get(1);
-        Singhal_RMI process3 = setup.getProcesses().get(2);
-
-        try{
-            Message message1 = new Message(process1.getIndex(),process2.getIndex(), 1);
-            process1.send(process2.getIndex(),message1, 0);
-
-            Message message2  = new Message(process2.getIndex(), process3.getIndex(), 2);
-            process2.send(process3.getIndex(), message2, 10);
-            
-            Message message3  = new Message(process2.getIndex(), process3.getIndex(), 3);
-            process1.send(process3.getIndex(),message3, 20);
-            
-            Message message4  = new Message(process2.getIndex(), process3.getIndex(), 4);
-            process2.send(process3.getIndex(), message4, 30);
-            
-            // wait until all messages have arrived.
-            Thread.sleep(50);
-
-            ArrayList<Message> messagesProcess2 = process2.getReceivedMessages();            
-            assertEquals(1, messagesProcess2.size());
-            assertEquals(message1.getId(), messagesProcess2.get(0).getId());
-            
-            ArrayList<Message> messagesProcess3 = process3.getReceivedMessages();
-            assertEquals(2, messagesProcess3.size());
-            assertEquals(message2.getId(), messagesProcess3.get(0).getId());
-            assertEquals(message3.getId(), messagesProcess3.get(1).getId());
-            assertEquals(message4.getId(), messagesProcess3.get(2).getId());
-
-        } catch (RemoteException e){
-            e.printStackTrace();
-            fail();
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-            fail();
-		}
-        testCompleted();
-    }
-    
-    
-    public void testScenario2(){
-    	startScenario("testScenario2");
-        Singhal_RMI process1 = setup.getProcesses().get(0);
-        Singhal_RMI process2 = setup.getProcesses().get(1);
-        Singhal_RMI process3 = setup.getProcesses().get(2);
-
-        try{
-            Message message1 = new Message(process1.getIndex(), process3.getIndex(), 1);
-            process1.send(process3.getIndex(), message1, 30);
-
-            Message message2 = new Message(process1.getIndex(), process2.getIndex(), 2);
-            process1.send(process2.getIndex(), message2, 10);
-            
-            //delay between msg2 and msg 3
-            Thread.sleep(20);
-            
-            Message message3 = new Message(process2.getIndex(), process3.getIndex(), 3);
-            process2.send(process3.getIndex(), message3, 0);
-            
-            // wait until all messages have arrived.
-            Thread.sleep(1500);
-
-            ArrayList<Message> messagesProcess2 = process2.getReceivedMessages();
-            assertEquals(1, messagesProcess2.size());
-            assertEquals(message2.getId(), messagesProcess2.get(0).getId());
-            
-            ArrayList<Message> messagesProcess3 = process3.getReceivedMessages();
-            assertEquals(2, messagesProcess3.size());
-            
-            assertEquals(message1.getId(), messagesProcess3.get(0).getId());
-            assertEquals(message3.getId(), messagesProcess3.get(1).getId());
-
-        } catch (RemoteException e){
-            e.printStackTrace();
-            fail();
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-            fail();
-		}
-        testCompleted();
-    }
-    
-    
-    /*
-     * Tests ordering of messages in the other way
-     * Proc1 will send msg1 to Proc2
-	 * Proc2 will send msg2 to Proc3, but delayed to after 3
-	 * Proc1 will send msg3 to Proc3
-     */
-    
-    public void testScenario3(){
-    	startScenario("testScenario3");
-        Singhal_RMI process1 = setup.getProcesses().get(0);
-        Singhal_RMI process2 = setup.getProcesses().get(1);
-        Singhal_RMI process3 = setup.getProcesses().get(2);
-
-        try{
-            Message message1 = new Message(process1.getIndex(),process2.getIndex(), 1);
-            process1.send(process2.getIndex(), message1, 0);
-
-            Message message2 = new Message(process2.getIndex(), process3.getIndex(), 2);
-            process2.send(process3.getIndex(), message2, 10);
-            
-            Message message3 = new Message(process1.getIndex(), process3.getIndex(), 3);
-            process1.send(process3.getIndex(), message3, 20);
-            
-            // wait until all messages have arrived.
-            Thread.sleep(150);
-
-            ArrayList<Message> messagesProcess2 = process2.getReceivedMessages();
-
-            assertEquals(1, messagesProcess2.size());
-            assertEquals(message1.getId(), messagesProcess2.get(0).getId());
-            
-            ArrayList<Message> messagesProcess3 = process3.getReceivedMessages();
-
-            assertEquals(2, messagesProcess3.size());
-            assertEquals(message2.getId(), messagesProcess3.get(0).getId());
-            assertEquals(message3.getId(), messagesProcess3.get(1).getId());
-
-        } catch (RemoteException e){
-            e.printStackTrace();
-            fail();
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-            fail();
-		}
-        testCompleted();
-    }
-    
-    
-    public void testScenario4(){
-    	startScenario("testScenario4");
-        Singhal_RMI process1 = setup.getProcesses().get(0);
-        Singhal_RMI process2 = setup.getProcesses().get(1);
-
-        try{
-        	// message 1 arrives after message 2s
-            Message message1 = new Message(process1.getIndex(),process2.getIndex(), 1);
-            process1.send(process2.getIndex(), message1, 20);
-
-            Message message2 = new Message(process1.getIndex(), process2.getIndex(), 2);
-            process1.send(process2.getIndex(), message2, 0);
-            
-            // wait until all messages have arrived.
-            Thread.sleep(150);
-
-            ArrayList<Message> messagesProcess2 = process2.getReceivedMessages();
-
-            assertEquals(2, messagesProcess2.size());
-            assertEquals(message1.getId(), messagesProcess2.get(0).getId());
-            assertEquals(message2.getId(), messagesProcess2.get(1).getId());
-            
-        } catch (RemoteException e){
-            e.printStackTrace();
-            fail();
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-            fail();
-		}
-        testCompleted();
-    }
-
-    
-    public void testScenario5(){
-    	startScenario("testScenario5");
-        Singhal_RMI process1 = setup.getProcesses().get(0);
-        Singhal_RMI process2 = setup.getProcesses().get(1);
-        Singhal_RMI process3 = setup.getProcesses().get(2);
-
-        try{
-        	// message 1 arrives after message 2
-            Message message1 = new Message(process1.getIndex(),process2.getIndex(), 1);
-            process1.send(process2.getIndex(), message1, 20);
-
-            Message message2 = new Message(process1.getIndex(), process2.getIndex(), 2);
-            process1.send(process2.getIndex(), message2, 0);
-            
-            Message message3 = new Message(process2.getIndex(), process3.getIndex(), 3);
-            process2.send(process3.getIndex(), message3, 10);
-            
-            // wait until all messages are received
-            Thread.sleep(150);
-
-            ArrayList<Message> messagesProcess2 = process2.getReceivedMessages();
-
-            assertEquals(2, messagesProcess2.size());
-            assertEquals(message1.getId(), messagesProcess2.get(0).getId());
-            assertEquals(message2.getId(), messagesProcess2.get(1).getId());
-            
-            ArrayList<Message> messagesProcess3 = process3.getReceivedMessages();
-
-            assertEquals(1, messagesProcess3.size());
-            assertEquals(message3.getId(), messagesProcess3.get(0).getId());
-
-        } catch (RemoteException e){
-            e.printStackTrace();
-            fail();
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-            fail();
-		}
+    	
+    	int i = 60;
+    	while(i > 0)
+    	{
+    		System.out.println(i + " seconds left...");
+	    	try {
+				Thread.sleep(1000);
+			} catch (InterruptedException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			} // Let the program run for 1 seconds
+	    	i--;
+    	}
+    	
+    	// Now check the accesstimes
+    	this.getAccessTimes();
+    	this.checkAccessTimes();
+    	
         testCompleted();
     }
     

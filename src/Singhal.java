@@ -19,9 +19,13 @@ public class Singhal implements Singhal_RMI, Runnable, Serializable {
 	
 	private int totalProcesses;
 	private int index;
+	private ArrayList<ArrayList<Long>> csAccessTimes;
+	private long csStartTime;
 	
 	private int myRand;
 	private Token token;
+	
+	private Boolean communicationDisabled = false;
 	
 	private ArrayList<Integer> N; // contains request numbers
 	private ArrayList<String> S; // Contains the states of the system: R, E, H, or O
@@ -36,6 +40,15 @@ public class Singhal implements Singhal_RMI, Runnable, Serializable {
     	myRand = rand.nextInt(50) + 1;
     	
     	System.out.println("Initiated Singhal with index " + index + " and rand " + myRand);
+    }
+    
+    public void disableCommunication()
+    {
+    	this.communicationDisabled = true;
+    }
+    
+    public void start() {
+    	reset();
     }
     
 	@Override
@@ -69,11 +82,7 @@ public class Singhal implements Singhal_RMI, Runnable, Serializable {
 		}
 		
 		
-		// TO DO: Initialize more?
-		
-		
-		// Now start the process by waiting for a random delay before requesting the CS
-		this.waitBeforeRequestingCS();
+		this.csAccessTimes = new ArrayList<ArrayList<Long>>();
 	}
 	
 
@@ -81,6 +90,27 @@ public class Singhal implements Singhal_RMI, Runnable, Serializable {
 	public void requestCSAccess()
 	{
 		System.out.println(this.index + ": now requesting CS Access");
+		
+		Boolean nobodyIsRequesting = true;
+		for(int j = 0; j < this.totalProcesses; j++)
+		{
+			if(j != this.index && this.S.get(j).equals("R"))
+			{
+				nobodyIsRequesting = false;
+				break;
+			}
+		}
+		
+		if(nobodyIsRequesting && this.S.get(this.index).equals("H"))
+		{
+			// Since nobody is requesting and we're the token holder... We can take the CS right away!
+			System.out.println("Own state is " + this.S.get(this.index));
+			System.out.println("Nobody is requesting and we're the token holder. Taking CS right away");
+			this.S.set(this.index, "E");
+			this.executeCS();
+			return;
+		}
+		
 		this.S.set(this.index, "R"); // Set own state to requesting
 		
 		this.N.set(this.index, this.N.get(this.index) + 1); // Increment request number
@@ -90,7 +120,7 @@ public class Singhal implements Singhal_RMI, Runnable, Serializable {
 		{
 			if(j != this.index) // Don't include yourself in this process
 			{
-				if(this.S.get(j) == "R")
+				if(this.S.get(j).equals("R"))
 				{
 					this.sendRequest(j);
 				}
@@ -101,6 +131,8 @@ public class Singhal implements Singhal_RMI, Runnable, Serializable {
 	// Sends a request to gain access to the CS to a process
 	public void sendRequest(int receiverIndex)
 	{
+		if(this.communicationDisabled) { return;}
+		
 		// send(request;i,N[i]) to Pj
 		System.out.println(this.index + ": sending REQUEST to process " + receiverIndex);
 		
@@ -110,6 +142,8 @@ public class Singhal implements Singhal_RMI, Runnable, Serializable {
 	// Processes a received request from process with id senderIndex
 	public void receiveRequest(int senderIndex, int r)
 	{
+		if(this.communicationDisabled) { return;}
+		
 		System.out.println(this.index + ": received REQUEST from process " + senderIndex);
 		
 		this.N.set(senderIndex, r); // Updates the message number to the new value
@@ -119,8 +153,11 @@ public class Singhal implements Singhal_RMI, Runnable, Serializable {
         		this.S.set(senderIndex, "R"); // Update the state to Requesting
             break;
         case "R":
-        		this.S.set(senderIndex, "R"); // Update the state to Requesting
-        		sendRequest(senderIndex); // Send request after all
+	        	if(!this.S.get(senderIndex).equals("R"))
+	        	{
+	        		this.S.set(senderIndex, "R"); // Update the state to Requesting
+	        		sendRequest(senderIndex); // Send request after all
+	        	}
             break;
         case "H":
         		// If you're holding the token, give away the token
@@ -136,6 +173,8 @@ public class Singhal implements Singhal_RMI, Runnable, Serializable {
 	// Sends the token to process with id receiverIndex
 	public void sendToken(int receiverIndex)
 	{
+		if(this.communicationDisabled) { return;}
+		
 		System.out.println(this.index + ": sending TOKEN to process " + receiverIndex);
 		
 		new Thread(new DelayedMessage("TOKEN", this.processes.get(receiverIndex), this.token)).start();
@@ -146,6 +185,8 @@ public class Singhal implements Singhal_RMI, Runnable, Serializable {
 	// Processes a received token from process with id senderIndex
 	public void receiveToken(Token token)
 	{
+		if(this.communicationDisabled) { return;}
+		
 		System.out.println(this.index + ": received TOKEN");
 		
 		this.token = token; // We got the token
@@ -159,20 +200,30 @@ public class Singhal implements Singhal_RMI, Runnable, Serializable {
 	{
 		// This piece of code starts executing the CS in a new thread
 		System.out.println(this.index + ": Starting the CS...");
+		
+		this.csStartTime = System.currentTimeMillis();
 		ThreadCallback c = new ThreadCallback(this, "doneWithCS");
 		new Thread(new CSExecuter(c, this.index)).start();
 	}
 	
 	public void doneWithCS()
 	{
+		if(this.communicationDisabled) { return;}
+		
+		
 		// This method gets called when the CS is done executing in the other thread
 		System.out.println(this.index + ": Continuing after executing the CS...");
+		ArrayList<Long> adder = new ArrayList<Long>();
+		adder.add(this.csStartTime);
+		adder.add(System.currentTimeMillis());
+		this.csAccessTimes.add(adder);
+		
 		this.S.set(this.index, "O"); // Set own state to O
 		this.token.setTS(this.index, "O"); // Update token accordingly
 		
 		
 		// Start "merging" the information now
-		Boolean everybodysStateIsO = true;
+		Boolean nobodyIsRequesting = true;
 		for(int j = 0; j < this.totalProcesses; j++)
 		{
 			if(this.N.get(j) > this.token.getTN(j)) // Local information is more up to date
@@ -186,13 +237,13 @@ public class Singhal implements Singhal_RMI, Runnable, Serializable {
 				this.S.set(j, this.token.getTS(j));
 			}
 			
-			if(!this.S.get(j).equals("O"))
+			if(this.S.get(j).equals("R"))
 			{
-				everybodysStateIsO = false;
+				nobodyIsRequesting = false;
 			}
 		}
 		
-		if(everybodysStateIsO)
+		if(nobodyIsRequesting)
 		{
 			this.S.set(this.index, "H"); // Since nobody is requesting... We'll be the token holder for a while
 		}
@@ -200,20 +251,23 @@ public class Singhal implements Singhal_RMI, Runnable, Serializable {
 		{
 			// Send the token to a requesting process
 			// For fairness, we send the token to the first process after our id
+			Boolean tokenSent = false;
 			for(int j = this.index + 1; j < this.totalProcesses; j++)
 			{
-				if(this.S.get(j).equals("R"))
+				if(this.S.get(j).equals("R") && !tokenSent)
 				{
+					this.S.set(this.index, "O");
 					this.sendToken(j); // Send the token to j
-					break;
+					tokenSent = true;
 				}
 			}
 			for(int j = 0; j < this.index; j++)
 			{
-				if(this.S.get(j).equals("R"))
+				if(this.S.get(j).equals("R") && !tokenSent)
 				{
+					this.S.set(this.index, "O");
 					this.sendToken(j);
-					break;
+					tokenSent = true;
 				}
 			}
 		}
@@ -245,6 +299,15 @@ public class Singhal implements Singhal_RMI, Runnable, Serializable {
 		// TODO Auto-generated method stub
 		System.out.println("Thread of process " + this.processURL + " started");
 		this.reset();
+		this.startExecution();
+	}
+	
+	public void startExecution() {
+		this.communicationDisabled = false; // enable communication
+
+		// Now start the process by waiting for a random delay before requesting the CS
+		this.waitBeforeRequestingCS();
+		
 	}
 	
 	/*@Override
@@ -298,6 +361,12 @@ public class Singhal implements Singhal_RMI, Runnable, Serializable {
 		System.out.println("Somebody requested my random int of " + this.myRand);
 		this.myRand++;
 		return this.myRand;
+	}
+
+	@Override
+	public ArrayList<ArrayList<Long>> getCSAccessTimes() throws RemoteException {
+		// TODO Auto-generated method stub
+		return this.csAccessTimes;
 	}
  
 }

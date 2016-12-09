@@ -124,7 +124,6 @@ public class ProcessStarter {
         			{
         				boundAProcess = true;
 	        			ownProcess = new Singhal(totalProcesses, localProcessURL, processURLs.indexOf(localProcessURL));
-	        			new Thread((Singhal) ownProcess).start();
 	        			Naming.bind(localProcessURL, UnicastRemoteObject.exportObject(ownProcess));
 	        			ownProcessURL = localProcessURL;
 	                    print(silent, "Process " + localProcessURL + " instantiated!");
@@ -186,6 +185,7 @@ public class ProcessStarter {
         	if(ownProcess != null)
         	{
         		((Singhal) ownProcess).setProcesses(processURLs);
+        		new Thread((Singhal) ownProcess).start();
         	}
 
 	        

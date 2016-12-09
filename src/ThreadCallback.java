@@ -1,6 +1,10 @@
 import java.util.Date;
 import java.util.Random;
 
+interface Callback {
+    void callback(); // would be in any signature
+}
+
 public class ThreadCallback implements Callback
 {
 	private Singhal obj;
@@ -50,7 +54,7 @@ class WaitBeforeCSRequest implements Runnable {
 		} // Sleep for that random time
  		
  		now = new java.util.Date();
-		System.out.println(now.toString() + ": I am process " + index + " and I am done waiting before requesting the CS.");
+		System.out.println(now.toString() + ": I am process " + index + " and I am done waiting before requesting the CS. ("+ sleepTime+")");
  		// End of the code of the CS
 		
         this.c.callback(); // callback

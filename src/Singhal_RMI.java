@@ -19,4 +19,10 @@ public interface Singhal_RMI extends Remote {
 	
 	public int getRandomInt() throws RemoteException;
 
+	public void startExecution() throws RemoteException;
+	
+	public void disableCommunication() throws RemoteException;
+
+	public ArrayList<ArrayList<Long>> getCSAccessTimes() throws RemoteException;
+
 }
